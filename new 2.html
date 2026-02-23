@@ -1,311 +1,298 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ניהול הון אנושי בית ספרי</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    
-    <style>
-        body { font-family: 'Assistant', sans-serif; }
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Users, 
+  UserCheck, 
+  Calendar, 
+  GraduationCap, 
+  Search, 
+  Settings, 
+  Plus, 
+  ChevronRight, 
+  ChevronLeft,
+  FileSpreadsheet,
+  Mail,
+  Phone,
+  Briefcase
+} from 'lucide-react';
+
+// --- קונפיגורציה ---
+// כאן תכניס את ה-ID של הגיליון שלך לאחר פרסומו ל-Web כ-CSV
+const SHEET_ID = ""; 
+const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1544717297-fa154da09f9d?w=150&h=150&fit=crop";
+
+const App = () => {
+  const [staff, setStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMember, setSelectedMember] = useState(null);
+
+  // פונקציה לייבוא נתונים מגוגל שיטס
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // אם יש SHEET_ID, נמשוך ממנו. אם לא, נשתמש בנתוני דמו מקצועיים.
+      if (SHEET_ID) {
+        const response = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`);
+        const text = await response.text();
+        const json = JSON.parse(text.substr(47).slice(0, -2));
+        const rows = json.table.rows.map(row => ({
+          id: row.c[0]?.v || Math.random(),
+          name: row.c[1]?.v || '',
+          role: row.c[2]?.v || '',
+          department: row.c[3]?.v || '',
+          status: row.c[4]?.v || 'Active',
+          phone: row.c[5]?.v || '',
+          email: row.c[6]?.v || '',
+          image: row.c[7]?.v || DEFAULT_AVATAR,
+          seniority: row.c[8]?.v || 0
+        }));
+        setStaff(rows);
+      } else {
+        // נתוני דמו לצרכי תצוגה
+        const demoData = [
+          { id: 1, name: "ד״ר רחל לוי", role: "מנהלת פדגוגית", department: "הנהלה", status: "Active", email: "rachel@school.edu", phone: "052-1234567", image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150", seniority: 15 },
+          { id: 2, name: "יוסי כהן", role: "רכז שכבת י'", department: "מורים", status: "Active", email: "yossi@school.edu", phone: "050-7654321", image: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150", seniority: 8 },
+          { id: 3, name: "מיכל אברהם", role: "יועצת חינוכית", department: "ייעוץ", status: "On Leave", email: "michal@school.edu", phone: "054-9876543", image: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150", seniority: 12 },
+          { id: 4, name: "אביב מזרחי", role: "מורה למתמטיקה", department: "מורים", status: "Active", email: "aviv@school.edu", phone: "053-1112233", image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150", seniority: 5 },
+          { id: 5, name: "שרה גולדנברג", role: "מזכירת בית ספר", department: "מנהלה", status: "Active", email: "sarah@school.edu", phone: "058-4445566", image: "https://images.unsplash.com/photo-1554151228-14d9def656e4?w=150", seniority: 20 },
+          { id: 6, name: "דניאל פרץ", role: "מורה לחינוך גופני", department: "מורים", status: "Active", email: "danny@school.edu", phone: "052-9988776", image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150", seniority: 3 },
+        ];
+        setStaff(demoData);
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const filteredStaff = staff.filter(member => 
+    (activeTab === 'all' || member.department === activeTab) &&
+    (member.name.includes(searchTerm) || member.role.includes(searchTerm))
+  );
+
+  const stats = {
+    total: staff.length,
+    active: staff.filter(s => s.status === 'Active').length,
+    leave: staff.filter(s => s.status === 'On Leave').length,
+    seniors: staff.filter(s => s.seniority > 10).length
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans rtl text-right" dir="rtl">
+      {/* Sidebar Navigation */}
+      <aside className="fixed right-0 top-0 h-full w-20 bg-indigo-900 text-white flex flex-col items-center py-8 gap-8 z-50">
+        <div className="bg-orange-500 p-3 rounded-2xl shadow-lg mb-4">
+          <GraduationCap size={28} />
+        </div>
+        <nav className="flex flex-col gap-6">
+          <button className="p-3 hover:bg-white/10 rounded-xl transition-colors text-orange-300"><Users size={24} /></button>
+          <button className="p-3 hover:bg-white/10 rounded-xl transition-colors"><Calendar size={24} /></button>
+          <button className="p-3 hover:bg-white/10 rounded-xl transition-colors"><FileSpreadsheet size={24} /></button>
+          <button className="p-3 hover:bg-white/10 rounded-xl transition-colors"><Settings size={24} /></button>
+        </nav>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="mr-20 p-8">
+        
+        {/* Header Section */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800">ניהול הון אנושי</h1>
+            <p className="text-slate-500 mt-1">בית הספר "נתיבי דעת" - לוח בקרה מרכזי</p>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                type="text" 
+                placeholder="חיפוש עובד/ת..." 
+                className="pr-10 pl-4 py-2 bg-white border border-slate-200 rounded-full w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-full flex items-center gap-2 transition-all shadow-md active:scale-95">
+              <Plus size={18} />
+              <span>הוספת עובד</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Stats Section */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+          <StatCard icon={<Users className="text-indigo-600" />} label="סה״כ עובדים" value={stats.total} color="bg-indigo-100" />
+          <StatCard icon={<UserCheck className="text-green-600" />} label="נוכחים היום" value={stats.active} color="bg-green-100" />
+          <StatCard icon={<Calendar className="text-orange-600" />} label="בחופשה/מחלה" value={stats.leave} color="bg-orange-100" />
+          <StatCard icon={<GraduationCap className="text-purple-600" />} label="וותק 10+ שנים" value={stats.seniors} color="bg-purple-100" />
+        </div>
+
+        {/* Filters and Scroller Sections */}
+        <div className="mb-6">
+          <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+            {['all', 'הנהלה', 'מורים', 'ייעוץ', 'מנהלה'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-6 py-2 rounded-full font-medium transition-all whitespace-nowrap shadow-sm ${
+                  activeTab === tab 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-white text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {tab === 'all' ? 'כל הצוות' : tab}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Dynamic Staff Scroller (Carousel) */}
+        <div className="relative group">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-slate-700">כרטיסי עובדים</h2>
+            <div className="flex gap-2">
+              <button onClick={() => scroll('left')} className="p-2 bg-white rounded-full shadow hover:bg-slate-50 transition-colors"><ChevronRight size={20}/></button>
+              <button onClick={() => scroll('right')} className="p-2 bg-white rounded-full shadow hover:bg-slate-50 transition-colors"><ChevronLeft size={20}/></button>
+            </div>
+          </div>
+          
+          <div 
+            id="staff-container"
+            className="flex gap-6 overflow-x-auto pb-8 snap-x no-scrollbar scroll-smooth"
+          >
+            {loading ? (
+              <div className="w-full flex justify-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+              </div>
+            ) : filteredStaff.length > 0 ? (
+              filteredStaff.map(member => (
+                <StaffCard 
+                  key={member.id} 
+                  member={member} 
+                  onClick={() => setSelectedMember(member)} 
+                />
+              ))
+            ) : (
+              <div className="w-full text-center py-20 text-slate-400 font-medium">לא נמצאו תוצאות לחיפוש זה.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Member Details Modal */}
+        {selectedMember && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="relative h-32 bg-gradient-to-l from-indigo-600 to-purple-600">
+                <button 
+                  onClick={() => setSelectedMember(null)}
+                  className="absolute left-4 top-4 bg-white/20 hover:bg-white/40 text-white rounded-full p-2"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+              </div>
+              <div className="px-8 pb-8 -mt-12">
+                <div className="flex items-end gap-6 mb-6">
+                  <img src={selectedMember.image} className="w-32 h-32 rounded-2xl border-4 border-white shadow-lg object-cover" />
+                  <div className="pb-2">
+                    <h3 className="text-2xl font-bold text-slate-800">{selectedMember.name}</h3>
+                    <p className="text-indigo-600 font-medium">{selectedMember.role}</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                  <DetailItem icon={<Briefcase size={18} />} label="מחלקה" value={selectedMember.department} />
+                  <DetailItem icon={<Calendar size={18} />} label="וותק" value={`${selectedMember.seniority} שנים`} />
+                  <DetailItem icon={<Mail size={18} />} label="דוא״ל" value={selectedMember.email} />
+                  <DetailItem icon={<Phone size={18} />} label="טלפון" value={selectedMember.phone} />
+                </div>
+                
+                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
+                  <button 
+                    onClick={() => setSelectedMember(null)}
+                    className="px-6 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-medium transition-colors"
+                  >
+                    סגור
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .glass-effect { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade { animation: fadeIn 0.4s ease-out forwards; }
-    </style>
-</head>
-<body class="bg-slate-50 text-slate-900">
-    <div id="root"></div>
+      `}</style>
+    </div>
+  );
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+  function scroll(direction) {
+    const container = document.getElementById('staff-container');
+    const scrollAmount = 400;
+    container.scrollBy({
+      left: direction === 'right' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    });
+  }
+};
 
-        // Global Firebase Config
-        const firebaseConfig = JSON.parse(window.__firebase_config || '{}');
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        const appId = window.__app_id || 'school-hcm-secure-final';
+const StatCard = ({ icon, label, value, color }) => (
+  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+    <div className={`p-3 rounded-2xl ${color}`}>
+      {icon}
+    </div>
+    <div>
+      <p className="text-slate-500 text-sm font-medium">{label}</p>
+      <p className="text-2xl font-bold text-slate-800">{value}</p>
+    </div>
+  </div>
+);
 
-        // Helper for Lucide Icons
-        const Icon = ({ name, className = "w-5 h-5" }) => {
-            const [iconHtml, setIconHtml] = React.useState('');
-            React.useEffect(() => {
-                if (window.lucide) {
-                    const icon = window.lucide.icons[name];
-                    if (icon) setIconHtml(icon.toSvg({ class: className }));
-                }
-            }, [name, className]);
-            return React.createElement('span', { 
-                dangerouslySetInnerHTML: { __html: iconHtml },
-                className: "inline-flex items-center justify-center"
-            });
-        };
+const StaffCard = ({ member, onClick }) => (
+  <div 
+    onClick={onClick}
+    className="min-w-[280px] bg-white rounded-3xl p-6 shadow-sm border border-slate-100 snap-start cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all group"
+  >
+    <div className="relative mb-4">
+      <img 
+        src={member.image} 
+        alt={member.name} 
+        className="w-20 h-20 rounded-2xl object-cover shadow-md group-hover:ring-4 ring-indigo-100 transition-all" 
+      />
+      <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white ${
+        member.status === 'Active' ? 'bg-green-500' : 'bg-orange-500'
+      }`}></div>
+    </div>
+    <h3 className="text-lg font-bold text-slate-800 mb-1">{member.name}</h3>
+    <p className="text-sm text-indigo-600 font-medium mb-3">{member.role}</p>
+    
+    <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 p-2 rounded-xl">
+      <Briefcase size={14} />
+      <span>{member.department}</span>
+      <span className="mx-1">•</span>
+      <span>{member.seniority} שנ׳ וותק</span>
+    </div>
+  </div>
+);
 
-        const App = () => {
-            const [user, setUser] = React.useState(null);
-            const [employees, setEmployees] = React.useState([]);
-            const [loading, setLoading] = React.useState(true);
-            const [searchTerm, setSearchTerm] = React.useState('');
-            const [filterTeam, setFilterTeam] = React.useState('הכל');
-            const [selectedEmp, setSelectedEmp] = React.useState(null);
-            const [isImportOpen, setIsImportOpen] = React.useState(false);
-            const [csvText, setCsvText] = React.useState('');
+const DetailItem = ({ icon, label, value }) => (
+  <div className="flex items-center gap-3">
+    <div className="p-2 bg-slate-50 rounded-lg text-slate-400">
+      {icon}
+    </div>
+    <div>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-slate-700 font-medium">{value}</p>
+    </div>
+  </div>
+);
 
-            // Rule 3: Auth First
-            React.useEffect(() => {
-                const initAuth = async () => {
-                    try {
-                        if (window.__initial_auth_token) {
-                            await signInWithCustomToken(auth, window.__initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (err) {
-                        console.error("Auth error:", err);
-                    }
-                };
-                initAuth();
-                const unsubscribe = onAuthStateChanged(auth, setUser);
-                return () => unsubscribe();
-            }, []);
-
-            // Rule 1 & 2: Fetch Data
-            React.useEffect(() => {
-                if (!user) return;
-                const path = `/artifacts/${appId}/users/${user.uid}/employees`;
-                const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'employees'));
-                
-                const unsubscribe = onSnapshot(q, (snapshot) => {
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setEmployees(data);
-                    setLoading(false);
-                }, (err) => {
-                    console.error("Firestore error:", err);
-                    setLoading(false);
-                });
-
-                return () => unsubscribe();
-            }, [user]);
-
-            const teams = React.useMemo(() => {
-                const unique = [...new Set(employees.map(e => e['שיוך ארגוני (שיוך לצוות כולל הנהלה)']).filter(Boolean))];
-                return ['הכל', ...unique];
-            }, [employees]);
-
-            const filtered = employees.filter(e => {
-                const matchesSearch = e['שם מלא']?.toLowerCase().includes(searchTerm.toLowerCase());
-                const matchesTeam = filterTeam === 'הכל' || e['שיוך ארגוני (שיוך לצוות כולל הנהלה)'] === filterTeam;
-                return matchesSearch && matchesTeam;
-            });
-
-            const handleImport = async () => {
-                if (!csvText || !user) return;
-                setLoading(true);
-                try {
-                    const rows = csvText.split('\n');
-                    const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
-                    
-                    for (let i = 1; i < rows.length; i++) {
-                        const values = rows[i].split(',').map(v => v.trim().replace(/"/g, ''));
-                        if (values.length < headers.length) continue;
-                        const obj = {};
-                        headers.forEach((h, idx) => { if(h) obj[h] = values[idx] || ''; });
-                        
-                        if (obj['שם מלא']) {
-                            const docId = obj['שם מלא'].replace(/\s+/g, '_');
-                            await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'employees', docId), obj);
-                        }
-                    }
-                    setIsImportOpen(false);
-                    setCsvText('');
-                } catch (err) {
-                    alert("שגיאה בייבוא הנתונים");
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            if (loading && employees.length === 0) {
-                return React.createElement('div', { className: "h-screen flex items-center justify-center bg-white" }, 
-                    React.createElement('div', { className: "text-center" },
-                        React.createElement('div', { className: "w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" }),
-                        React.createElement('p', { className: "font-bold text-slate-600" }, "טוען מערכת מאובטחת...")
-                    )
-                );
-            }
-
-            return React.createElement('div', { className: "min-h-screen flex" },
-                // Sidebar
-                React.createElement('aside', { className: "w-64 bg-slate-900 text-white p-6 hidden lg:flex flex-col fixed h-full shadow-2xl" },
-                    React.createElement('div', { className: "flex items-center gap-3 mb-10" },
-                        React.createElement('div', { className: "bg-indigo-600 p-2 rounded-xl shadow-lg" }, React.createElement(Icon, { name: "ShieldCheck", className: "w-6 h-6" })),
-                        React.createElement('h1', { className: "text-xl font-bold" }, "HCM ביה\"ס")
-                    ),
-                    React.createElement('nav', { className: "space-y-2 flex-1" },
-                        React.createElement('button', { className: "flex items-center gap-3 w-full p-3 rounded-xl bg-indigo-600 font-bold" }, 
-                            React.createElement(Icon, { name: "LayoutDashboard" }), React.createElement('span', null, "דשבורד")
-                        ),
-                        React.createElement('button', { className: "flex items-center gap-3 w-full p-3 rounded-xl hover:bg-white/5 text-slate-400" }, 
-                            React.createElement(Icon, { name: "Users" }), React.createElement('span', null, "רשימת צוות")
-                        )
-                    ),
-                    React.createElement('button', { 
-                        onClick: () => setIsImportOpen(true),
-                        className: "flex items-center gap-3 w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-indigo-400 font-bold hover:border-indigo-500 transition-all" 
-                    }, 
-                        React.createElement(Icon, { name: "Database" }), React.createElement('span', null, "ייבוא CSV")
-                    )
-                ),
-
-                // Main Content
-                React.createElement('main', { className: "flex-1 lg:mr-64 p-4 lg:p-10" },
-                    React.createElement('header', { className: "flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4" },
-                        React.createElement('div', null,
-                            React.createElement('h2', { className: "text-3xl font-black text-slate-800" }, "ניהול הון אנושי"),
-                            React.createElement('p', { className: "text-slate-500" }, "מערכת בית ספרית מאובטחת")
-                        ),
-                        React.createElement('div', { className: "flex gap-3 w-full md:w-auto" },
-                            React.createElement('div', { className: "relative flex-1 md:w-64" },
-                                React.createElement('div', { className: "absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" }, React.createElement(Icon, { name: "Search", className: "w-4 h-4" })),
-                                React.createElement('input', { 
-                                    type: "text", 
-                                    placeholder: "חיפוש מורה...",
-                                    className: "w-full pr-10 pl-4 py-2.5 bg-white border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500",
-                                    value: searchTerm,
-                                    onChange: (e) => setSearchTerm(e.target.value)
-                                })
-                            )
-                        )
-                    ),
-
-                    // Stats
-                    React.createElement('div', { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10" },
-                        [{ t: 'סה״כ צוות', v: employees.length, c: 'border-indigo-500', i: 'Users' },
-                         { t: 'פעילים', v: employees.filter(e => e['סטטוס נוכחי (פעיל / חל"ת / שבתון / חופשת לידה)'] === 'פעיל').length, c: 'border-emerald-500', i: 'HeartPulse' },
-                         { t: 'שבתון/חל״ת', v: employees.filter(e => e['סטטוס נוכחי (פעיל / חל"ת / שבתון / חופשת לידה)'] !== 'פעיל').length, c: 'border-amber-400', i: 'Calendar' },
-                         { t: 'פוטנציאל קידום', v: employees.filter(e => e['פוטנציאל ניהולי / קידום'] === 'גבוה').length, c: 'border-fuchsia-500', i: 'TrendingUp' }
-                        ].map((s, i) => React.createElement('div', { key: i, className: `bg-white p-6 rounded-2xl shadow-sm border-r-4 ${s.c} flex justify-between items-center animate-fade` },
-                            React.createElement('div', null, 
-                                React.createElement('p', { className: "text-slate-500 text-sm" }, s.t),
-                                React.createElement('h3', { className: "text-2xl font-bold" }, s.v)
-                            ),
-                            React.createElement(Icon, { name: s.i, className: "w-8 h-8 opacity-20" })
-                        ))
-                    ),
-
-                    // Filter Bar
-                    React.createElement('div', { className: "mb-8 flex items-center gap-3 overflow-x-auto pb-2 no-scrollbar" },
-                        React.createElement('div', { className: "bg-white p-2 rounded-2xl border flex items-center gap-2 whitespace-nowrap shadow-sm" },
-                            React.createElement('span', { className: "px-3 text-slate-400 font-bold text-sm" }, "סינון:"),
-                            teams.map(t => React.createElement('button', {
-                                key: t,
-                                onClick: () => setFilterTeam(t),
-                                className: `px-5 py-2 rounded-xl text-sm font-bold transition-all ${filterTeam === t ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`
-                            }, t))
-                        )
-                    ),
-
-                    // Grid
-                    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6" },
-                        filtered.map((e, idx) => React.createElement('div', {
-                            key: idx,
-                            onClick: () => setSelectedEmp(e),
-                            className: "bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-200 transition-all cursor-pointer group animate-fade"
-                        },
-                            React.createElement('div', { className: "flex justify-between items-start mb-4" },
-                                React.createElement('div', { className: "flex items-center gap-3" },
-                                    React.createElement('div', { className: "w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-lg group-hover:bg-indigo-600 group-hover:text-white transition-all" }, e['שם מלא']?.charAt(0)),
-                                    React.createElement('div', null,
-                                        React.createElement('h4', { className: "font-bold text-slate-800" }, e['שם מלא']),
-                                        React.createElement('p', { className: "text-xs text-slate-500" }, e['תפקיד עיקרי (פירוט כלל התפקידים)'] || 'מורה')
-                                    )
-                                ),
-                                React.createElement('span', { className: "px-2 py-1 rounded-lg bg-green-50 text-green-700 text-[10px] font-bold" }, e['סטטוס נוכחי (פעיל / חל"ת / שבתון / חופשת לידה)'] || 'פעיל')
-                            ),
-                            React.createElement('div', { className: "grid grid-cols-2 gap-2 text-xs text-slate-400 border-t pt-4" },
-                                React.createElement('div', { className: "flex items-center gap-1" }, React.createElement(Icon, { name: "Calendar", className: "w-3 h-3" }), `ותק: ${e['ותק בחינוך'] || 0}`),
-                                React.createElement('div', { className: "flex items-center gap-1" }, React.createElement(Icon, { name: "TrendingUp", className: "w-3 h-3" }), `דרגה: ${e['דרגה נוכחית'] || '-'}`)
-                            )
-                        ))
-                    )
-                ),
-
-                // Modal Detail
-                selectedEmp && React.createElement('div', { className: "fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" },
-                    React.createElement('div', { className: "bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-fade" },
-                        React.createElement('div', { className: "sticky top-0 bg-white/90 backdrop-blur p-6 border-b flex justify-between items-center" },
-                            React.createElement('h2', { className: "text-xl font-bold" }, `כרטיס עובד: ${selectedEmp['שם מלא']}`),
-                            React.createElement('button', { onClick: () => setSelectedEmp(null), className: "p-2 hover:bg-slate-100 rounded-full" }, React.createElement(Icon, { name: "X" }))
-                        ),
-                        React.createElement('div', { className: "p-8 space-y-8" },
-                            React.createElement('div', { className: "flex gap-8 items-center" },
-                                React.createElement('div', { className: "w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-4xl font-black shadow-xl" }, selectedEmp['שם מלא'].charAt(0)),
-                                React.createElement('div', null,
-                                    React.createElement('h3', { className: "text-3xl font-black text-slate-800" }, selectedEmp['שם מלא']),
-                                    React.createElement('p', { className: "text-indigo-600 font-bold" }, selectedEmp['תפקיד עיקרי (פירוט כלל התפקידים)']),
-                                    React.createElement('div', { className: "flex gap-4 mt-4" },
-                                        React.createElement('span', { className: "flex items-center gap-2 text-sm text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full" }, React.createElement(Icon, { name: "Mail", className: "w-4 h-4" }), selectedEmp['מייל']),
-                                        React.createElement('span', { className: "flex items-center gap-2 text-sm text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full" }, React.createElement(Icon, { name: "Phone", className: "w-4 h-4" }), selectedEmp['נייד'])
-                                    )
-                                )
-                            ),
-                            React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-6" },
-                                React.createElement('div', { className: "bg-slate-50 p-6 rounded-3xl" },
-                                    React.createElement('h4', { className: "font-bold mb-4 flex items-center gap-2" }, React.createElement(Icon, { name: "GraduationCap" }), "ותק וצמיחה"),
-                                    React.createElement('p', { className: "text-sm text-slate-600" }, `ותק בחינוך: ${selectedEmp['ותק בחינוך']} שנים`),
-                                    React.createElement('p', { className: "text-sm text-slate-600 mt-2" }, `דרגה: ${selectedEmp['דרגה נוכחית']}`)
-                                ),
-                                React.createElement('div', { className: "bg-slate-50 p-6 rounded-3xl" },
-                                    React.createElement('h4', { className: "font-bold mb-4 flex items-center gap-2 text-emerald-600" }, React.createElement(Icon, { name: "TrendingUp" }), "יעדים"),
-                                    React.createElement('p', { className: "text-xs font-bold text-slate-400 uppercase" }, "יעד שנתי:"),
-                                    React.createElement('p', { className: "text-sm mt-1" }, selectedEmp['יעד התפתחות שנתי'] || 'לא הוגדר')
-                                ),
-                                React.createElement('div', { className: "bg-slate-50 p-6 rounded-3xl" },
-                                    React.createElement('h4', { className: "font-bold mb-4 flex items-center gap-2 text-rose-500" }, React.createElement(Icon, { name: "HeartPulse" }), "שימור"),
-                                    React.createElement('div', { className: "bg-white p-3 rounded-xl border text-xs" },
-                                        React.createElement('span', { className: "text-slate-400" }, "סטטוס דופק: "),
-                                        React.createElement('span', { className: "font-bold text-emerald-600" }, selectedEmp['סטטוס שימור (דופק)'] || 'יציב')
-                                    )
-                                )
-                            )
-                        )
-                    )
-                ),
-
-                // Import Modal
-                isImportOpen && React.createElement('div', { className: "fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" },
-                    React.createElement('div', { className: "bg-white rounded-3xl w-full max-w-2xl p-8 shadow-2xl animate-fade" },
-                        React.createElement('h2', { className: "text-2xl font-black text-slate-800 mb-6" }, "ייבוא נתונים מאובטח"),
-                        React.createElement('p', { className: "text-sm text-slate-500 mb-4" }, "ייצאו את גליון הגוגל כ-CSV, העתיקו את התוכן והדביקו כאן:"),
-                        React.createElement('textarea', { 
-                            className: "w-full h-64 p-4 bg-slate-50 border rounded-2xl font-mono text-xs focus:ring-2 focus:ring-indigo-500 outline-none mb-6",
-                            value: csvText,
-                            onChange: (e) => setCsvText(e.target.value),
-                            placeholder: "שם מלא,תפקיד,מייל..."
-                        }),
-                        React.createElement('div', { className: "flex justify-end gap-3" },
-                            React.createElement('button', { onClick: () => setIsImportOpen(false), className: "px-6 py-2 font-bold text-slate-400" }, "ביטול"),
-                            React.createElement('button', { 
-                                onClick: handleImport, 
-                                className: "px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg" 
-                            }, "שמור נתונים")
-                        )
-                    )
-                )
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(App));
-    </script>
-</body>
-</html>
+export default App;
