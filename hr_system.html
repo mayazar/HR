@@ -4,8 +4,16 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>מאגר עובדים HR</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+// בדיקה שהספריות נטענו - אם לא, מציג הודעת שגיאה ידידותית
+window.addEventListener('error', function(e) {
+  if (e.message && e.message.includes('Script error')) {
+    document.getElementById('root').innerHTML = '<div style="padding:40px;text-align:center;font-family:Arial;direction:rtl"><h2>⚠️ בעיית חיבור לאינטרנט</h2><p>האפליקציה דורשת חיבור לאינטרנט בטעינה הראשונה. נסי שוב כשיש חיבור.</p></div>';
+  }
+});
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.8.0/Recharts.min.js"></script>
 <style>
