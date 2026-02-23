@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ניהול הון אנושי בית ספרי</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Assistant', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .glass-effect { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade { animation: fadeIn 0.4s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // Global Firebase Config
+        const firebaseConfig = JSON.parse(window.__firebase_config || '{}');
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const appId = window.__app_id || 'school-hcm-secure-final';
+
+        // Helper for Lucide Icons
+        const Icon = ({ name, className = "w-5 h-5" }) => {
+            const [iconHtml, setIconHtml] = React.useState('');
+            React.useEffect(() => {
+                if (window.lucide) {
+                    const icon = window.lucide.icons[name];
+                    if (icon) setIconHtml(icon.toSvg({ class: className }));
+                }
+            }, [name, className]);
+            return React.createElement('span', { 
+                dangerouslySetInnerHTML: { __html: iconHtml },
+                className: "inline-flex items-center justify-center"
+            });
+        };
+
+        const App = () => {
+            const [user, setUser] = React.useState(null);
+            const [employees, setEmployees] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            const [searchTerm, setSearchTerm] = React.useState('');
+            const [filterTeam, setFilterTeam] = React.useState('הכל');
+            const [selectedEmp, setSelectedEmp] = React.useState(null);
+            const [isImportOpen, setIsImportOpen] = React.useState(false);
+            const [csvText, setCsvText] = React.useState('');
+
+            // Rule 3: Auth First
+            React.useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (window.__initial_auth_token) {
+                            await signInWithCustomToken(auth, window.__initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        console.error("Auth error:", err);
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
+
+            // Rule 1 & 2: Fetch Data
+            React.useEffect(() => {
+                if (!user) return;
+                const path = `/artifacts/${appId}/users/${user.uid}/employees`;
+                const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'employees'));
+                
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setEmployees(data);
+                    setLoading(false);
+                }, (err) => {
+                    console.error("Firestore error:", err);
+                    setLoading(false);
+                });
+
+                return () => unsubscribe();
+            }, [user]);
+
+            const teams = React.useMemo(() => {
+                const unique = [...new Set(employees.map(e => e['שיוך ארגוני (שיוך לצוות כולל הנהלה)']).filter(Boolean))];
+                return ['הכל', ...unique];
+            }, [employees]);
+
+            const filtered = employees.filter(e => {
+                const matchesSearch = e['שם מלא']?.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesTeam = filterTeam === 'הכל' || e['שיוך ארגוני (שיוך לצוות כולל הנהלה)'] === filterTeam;
+                return matchesSearch && matchesTeam;
+            });
+
+            const handleImport = async () => {
+                if (!csvText || !user) return;
+                setLoading(true);
+                try {
+                    const rows = csvText.split('\n');
+                    const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+                    
+                    for (let i = 1; i < rows.length; i++) {
+                        const values = rows[i].split(',').map(v => v.trim().replace(/"/g, ''));
+                        if (values.length < headers.length) continue;
+                        const obj = {};
+                        headers.forEach((h, idx) => { if(h) obj[h] = values[idx] || ''; });
+                        
+                        if (obj['שם מלא']) {
+                            const docId = obj['שם מלא'].replace(/\s+/g, '_');
+                            await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'employees', docId), obj);
+                        }
+                    }
+                    setIsImportOpen(false);
+                    setCsvText('');
+                } catch (err) {
+                    alert("שגיאה בייבוא הנתונים");
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            if (loading && employees.length === 0) {
+                return React.createElement('div', { className: "h-screen flex items-center justify-center bg-white" }, 
+                    React.createElement('div', { className: "text-center" },
+                        React.createElement('div', { className: "w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" }),
+                        React.createElement('p', { className: "font-bold text-slate-600" }, "טוען מערכת מאובטחת...")
+                    )
+                );
+            }
+
+            return React.createElement('div', { className: "min-h-screen flex" },
+                // Sidebar
+                React.createElement('aside', { className: "w-64 bg-slate-900 text-white p-6 hidden lg:flex flex-col fixed h-full shadow-2xl" },
+                    React.createElement('div', { className: "flex items-center gap-3 mb-10" },
+                        React.createElement('div', { className: "bg-indigo-600 p-2 rounded-xl shadow-lg" }, React.createElement(Icon, { name: "ShieldCheck", className: "w-6 h-6" })),
+                        React.createElement('h1', { className: "text-xl font-bold" }, "HCM ביה\"ס")
+                    ),
+                    React.createElement('nav', { className: "space-y-2 flex-1" },
+                        React.createElement('button', { className: "flex items-center gap-3 w-full p-3 rounded-xl bg-indigo-600 font-bold" }, 
+                            React.createElement(Icon, { name: "LayoutDashboard" }), React.createElement('span', null, "דשבורד")
+                        ),
+                        React.createElement('button', { className: "flex items-center gap-3 w-full p-3 rounded-xl hover:bg-white/5 text-slate-400" }, 
+                            React.createElement(Icon, { name: "Users" }), React.createElement('span', null, "רשימת צוות")
+                        )
+                    ),
+                    React.createElement('button', { 
+                        onClick: () => setIsImportOpen(true),
+                        className: "flex items-center gap-3 w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-indigo-400 font-bold hover:border-indigo-500 transition-all" 
+                    }, 
+                        React.createElement(Icon, { name: "Database" }), React.createElement('span', null, "ייבוא CSV")
+                    )
+                ),
+
+                // Main Content
+                React.createElement('main', { className: "flex-1 lg:mr-64 p-4 lg:p-10" },
+                    React.createElement('header', { className: "flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4" },
+                        React.createElement('div', null,
+                            React.createElement('h2', { className: "text-3xl font-black text-slate-800" }, "ניהול הון אנושי"),
+                            React.createElement('p', { className: "text-slate-500" }, "מערכת בית ספרית מאובטחת")
+                        ),
+                        React.createElement('div', { className: "flex gap-3 w-full md:w-auto" },
+                            React.createElement('div', { className: "relative flex-1 md:w-64" },
+                                React.createElement('div', { className: "absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" }, React.createElement(Icon, { name: "Search", className: "w-4 h-4" })),
+                                React.createElement('input', { 
+                                    type: "text", 
+                                    placeholder: "חיפוש מורה...",
+                                    className: "w-full pr-10 pl-4 py-2.5 bg-white border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500",
+                                    value: searchTerm,
+                                    onChange: (e) => setSearchTerm(e.target.value)
+                                })
+                            )
+                        )
+                    ),
+
+                    // Stats
+                    React.createElement('div', { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10" },
+                        [{ t: 'סה״כ צוות', v: employees.length, c: 'border-indigo-500', i: 'Users' },
+                         { t: 'פעילים', v: employees.filter(e => e['סטטוס נוכחי (פעיל / חל"ת / שבתון / חופשת לידה)'] === 'פעיל').length, c: 'border-emerald-500', i: 'HeartPulse' },
+                         { t: 'שבתון/חל״ת', v: employees.filter(e => e['סטטוס נוכחי (פעיל / חל"ת / שבתון / חופשת לידה)'] !== 'פעיל').length, c: 'border-amber-400', i: 'Calendar' },
+                         { t: 'פוטנציאל קידום', v: employees.filter(e => e['פוטנציאל ניהולי / קידום'] === 'גבוה').length, c: 'border-fuchsia-500', i: 'TrendingUp' }
+                        ].map((s, i) => React.createElement('div', { key: i, className: `bg-white p-6 rounded-2xl shadow-sm border-r-4 ${s.c} flex justify-between items-center animate-fade` },
+                            React.createElement('div', null, 
+                                React.createElement('p', { className: "text-slate-500 text-sm" }, s.t),
+                                React.createElement('h3', { className: "text-2xl font-bold" }, s.v)
+                            ),
+                            React.createElement(Icon, { name: s.i, className: "w-8 h-8 opacity-20" })
+                        ))
+                    ),
+
+                    // Filter Bar
+                    React.createElement('div', { className: "mb-8 flex items-center gap-3 overflow-x-auto pb-2 no-scrollbar" },
+                        React.createElement('div', { className: "bg-white p-2 rounded-2xl border flex items-center gap-2 whitespace-nowrap shadow-sm" },
+                            React.createElement('span', { className: "px-3 text-slate-400 font-bold text-sm" }, "סינון:"),
+                            teams.map(t => React.createElement('button', {
+                                key: t,
+                                onClick: () => setFilterTeam(t),
+                                className: `px-5 py-2 rounded-xl text-sm font-bold transition-all ${filterTeam === t ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`
+                            }, t))
+                        )
+                    ),
+
+                    // Grid
+                    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6" },
+                        filtered.map((e, idx) => React.createElement('div', {
+                            key: idx,
+                            onClick: () => setSelectedEmp(e),
+                            className: "bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-200 transition-all cursor-pointer group animate-fade"
+                        },
+                            React.createElement('div', { className: "flex justify-between items-start mb-4" },
+                                React.createElement('div', { className: "flex items-center gap-3" },
+                                    React.createElement('div', { className: "w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-lg group-hover:bg-indigo-600 group-hover:text-white transition-all" }, e['שם מלא']?.charAt(0)),
+                                    React.createElement('div', null,
+                                        React.createElement('h4', { className: "font-bold text-slate-800" }, e['שם מלא']),
+                                        React.createElement('p', { className: "text-xs text-slate-500" }, e['תפקיד עיקרי (פירוט כלל התפקידים)'] || 'מורה')
+                                    )
+                                ),
+                                React.createElement('span', { className: "px-2 py-1 rounded-lg bg-green-50 text-green-700 text-[10px] font-bold" }, e['סטטוס נוכחי (פעיל / חל"ת / שבתון / חופשת לידה)'] || 'פעיל')
+                            ),
+                            React.createElement('div', { className: "grid grid-cols-2 gap-2 text-xs text-slate-400 border-t pt-4" },
+                                React.createElement('div', { className: "flex items-center gap-1" }, React.createElement(Icon, { name: "Calendar", className: "w-3 h-3" }), `ותק: ${e['ותק בחינוך'] || 0}`),
+                                React.createElement('div', { className: "flex items-center gap-1" }, React.createElement(Icon, { name: "TrendingUp", className: "w-3 h-3" }), `דרגה: ${e['דרגה נוכחית'] || '-'}`)
+                            )
+                        ))
+                    )
+                ),
+
+                // Modal Detail
+                selectedEmp && React.createElement('div', { className: "fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" },
+                    React.createElement('div', { className: "bg-white rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-fade" },
+                        React.createElement('div', { className: "sticky top-0 bg-white/90 backdrop-blur p-6 border-b flex justify-between items-center" },
+                            React.createElement('h2', { className: "text-xl font-bold" }, `כרטיס עובד: ${selectedEmp['שם מלא']}`),
+                            React.createElement('button', { onClick: () => setSelectedEmp(null), className: "p-2 hover:bg-slate-100 rounded-full" }, React.createElement(Icon, { name: "X" }))
+                        ),
+                        React.createElement('div', { className: "p-8 space-y-8" },
+                            React.createElement('div', { className: "flex gap-8 items-center" },
+                                React.createElement('div', { className: "w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-4xl font-black shadow-xl" }, selectedEmp['שם מלא'].charAt(0)),
+                                React.createElement('div', null,
+                                    React.createElement('h3', { className: "text-3xl font-black text-slate-800" }, selectedEmp['שם מלא']),
+                                    React.createElement('p', { className: "text-indigo-600 font-bold" }, selectedEmp['תפקיד עיקרי (פירוט כלל התפקידים)']),
+                                    React.createElement('div', { className: "flex gap-4 mt-4" },
+                                        React.createElement('span', { className: "flex items-center gap-2 text-sm text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full" }, React.createElement(Icon, { name: "Mail", className: "w-4 h-4" }), selectedEmp['מייל']),
+                                        React.createElement('span', { className: "flex items-center gap-2 text-sm text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full" }, React.createElement(Icon, { name: "Phone", className: "w-4 h-4" }), selectedEmp['נייד'])
+                                    )
+                                )
+                            ),
+                            React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-6" },
+                                React.createElement('div', { className: "bg-slate-50 p-6 rounded-3xl" },
+                                    React.createElement('h4', { className: "font-bold mb-4 flex items-center gap-2" }, React.createElement(Icon, { name: "GraduationCap" }), "ותק וצמיחה"),
+                                    React.createElement('p', { className: "text-sm text-slate-600" }, `ותק בחינוך: ${selectedEmp['ותק בחינוך']} שנים`),
+                                    React.createElement('p', { className: "text-sm text-slate-600 mt-2" }, `דרגה: ${selectedEmp['דרגה נוכחית']}`)
+                                ),
+                                React.createElement('div', { className: "bg-slate-50 p-6 rounded-3xl" },
+                                    React.createElement('h4', { className: "font-bold mb-4 flex items-center gap-2 text-emerald-600" }, React.createElement(Icon, { name: "TrendingUp" }), "יעדים"),
+                                    React.createElement('p', { className: "text-xs font-bold text-slate-400 uppercase" }, "יעד שנתי:"),
+                                    React.createElement('p', { className: "text-sm mt-1" }, selectedEmp['יעד התפתחות שנתי'] || 'לא הוגדר')
+                                ),
+                                React.createElement('div', { className: "bg-slate-50 p-6 rounded-3xl" },
+                                    React.createElement('h4', { className: "font-bold mb-4 flex items-center gap-2 text-rose-500" }, React.createElement(Icon, { name: "HeartPulse" }), "שימור"),
+                                    React.createElement('div', { className: "bg-white p-3 rounded-xl border text-xs" },
+                                        React.createElement('span', { className: "text-slate-400" }, "סטטוס דופק: "),
+                                        React.createElement('span', { className: "font-bold text-emerald-600" }, selectedEmp['סטטוס שימור (דופק)'] || 'יציב')
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+
+                // Import Modal
+                isImportOpen && React.createElement('div', { className: "fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" },
+                    React.createElement('div', { className: "bg-white rounded-3xl w-full max-w-2xl p-8 shadow-2xl animate-fade" },
+                        React.createElement('h2', { className: "text-2xl font-black text-slate-800 mb-6" }, "ייבוא נתונים מאובטח"),
+                        React.createElement('p', { className: "text-sm text-slate-500 mb-4" }, "ייצאו את גליון הגוגל כ-CSV, העתיקו את התוכן והדביקו כאן:"),
+                        React.createElement('textarea', { 
+                            className: "w-full h-64 p-4 bg-slate-50 border rounded-2xl font-mono text-xs focus:ring-2 focus:ring-indigo-500 outline-none mb-6",
+                            value: csvText,
+                            onChange: (e) => setCsvText(e.target.value),
+                            placeholder: "שם מלא,תפקיד,מייל..."
+                        }),
+                        React.createElement('div', { className: "flex justify-end gap-3" },
+                            React.createElement('button', { onClick: () => setIsImportOpen(false), className: "px-6 py-2 font-bold text-slate-400" }, "ביטול"),
+                            React.createElement('button', { 
+                                onClick: handleImport, 
+                                className: "px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg" 
+                            }, "שמור נתונים")
+                        )
+                    )
+                )
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
